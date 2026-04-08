@@ -43,24 +43,6 @@ func CreatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(people)
 }
 func UpdatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
-	// params := mux.Vars(req)
-	// for index, item := range people {
-	// 	if item.ID == params["id"] {
-	// 		people = append(people[:index], people[index+1:]...)
-	// 		break
-	// 	}
-	// }
-	// json.NewEncoder(w).Encode(people)
-
-	// var person Person
-	// _ = json.NewDecoder(req.Body).Decode(&person)
-	// person.ID = params["id"]
-	// people = append(people, person)
-	// json.NewEncoder(w).Encode(people)
-	DeletePersonEndpoint(w, req)
-	CreatePersonEndpoint(w, req)
-}
-func DeletePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 	for index, item := range people {
 		if item.ID == params["id"] {
@@ -68,7 +50,24 @@ func DeletePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 			break
 		}
 	}
+	var person Person
+	_ = json.NewDecoder(req.Body).Decode(&person)
+	person.ID = params["id"]
+	people = append(people, person)
 	json.NewEncoder(w).Encode(people)
+}
+func DeletePersonEndpoint(w http.ResponseWriter, req *http.Request) {
+	params := mux.Vars(req)
+	for index, item := range people {
+		if item.ID == params["id"] {
+			people = append(people[:index], people[index+1:]...)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"message":"Person deleted successfully"}`))
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"error":"Person not found"}`))
 }
 func main() {
 	router := mux.NewRouter()
