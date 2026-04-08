@@ -90,3 +90,23 @@ func TestGetPeopleEndpoint(t *testing.T) {
 			status, http.StatusOK)
 	}
 }
+
+func TestHealthEndpoint(t *testing.T) {
+	// Test that health endpoint returns 200 and correct payload
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	HealthEndpoint(w, req)
+
+	if status := w.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Check that we got the correct success payload
+	expectedBody := `{"status":"healthy"}`
+	body := w.Body.String()
+	if body != expectedBody {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			body, expectedBody)
+	}
+}
