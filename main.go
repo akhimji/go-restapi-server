@@ -69,6 +69,13 @@ func DeletePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte(`{"error":"Person not found"}`))
 }
+
+func HealthEndpoint(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy"}`))
+}
+
 func main() {
 	router := mux.NewRouter()
 	people = append(people, Person{ID: "1", Firstname: "Ernest", Lastname: "Hemingway", Address: &Address{City: "Dublin", State: "CA"}})
@@ -78,5 +85,6 @@ func main() {
 	router.HandleFunc("/people/{id}", CreatePersonEndpoint).Methods("POST")
 	router.HandleFunc("/people/{id}", UpdatePersonEndpoint).Methods("PUT")
 	router.HandleFunc("/people/{id}", DeletePersonEndpoint).Methods("DELETE")
+	router.HandleFunc("/health", HealthEndpoint).Methods("GET")
 	log.Fatal(http.ListenAndServe(":12345", router))
 }
