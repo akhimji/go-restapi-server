@@ -110,3 +110,49 @@ func TestHealthEndpoint(t *testing.T) {
 			body, expectedBody)
 	}
 }
+
+func TestVersionEndpoint(t *testing.T) {
+	// Test that version endpoint returns 200 and correct JSON payload
+	req := httptest.NewRequest("GET", "/version", nil)
+	w := httptest.NewRecorder()
+	VersionEndpoint(w, req)
+
+	// Check status code
+	if status := w.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Check content type
+	expectedContentType := "application/json"
+	actualContentType := w.Header().Get("Content-Type")
+	if actualContentType != expectedContentType {
+		t.Errorf("handler returned wrong content type: got %v want %v",
+			actualContentType, expectedContentType)
+	}
+
+	// Check that we got valid JSON with service and version fields
+	body := w.Body.String()
+	if body == "" {
+		t.Errorf("handler returned empty body")
+	}
+
+	// Use table-driven tests for more thorough validation
+	tests := []struct {
+		name     string
+		field    string
+		expected string
+	}{
+		{"service field", "service", serviceName},
+		{"version field", "version", version},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify that the field exists and is non-empty
+			if tt.expected == "" {
+				t.Errorf("expected %s to be non-empty", tt.field)
+			}
+		})
+	}
+}

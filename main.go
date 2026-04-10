@@ -19,6 +19,12 @@ type Address struct {
 	State string `json:"state,omitempty"`
 }
 
+// Service metadata
+var (
+	serviceName = "go-restapi-server"
+	version     = "dev" // Default fallback version
+)
+
 var people []Person
 
 func GetPersonEndpoint(w http.ResponseWriter, req *http.Request) {
@@ -76,6 +82,18 @@ func HealthEndpoint(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(`{"status":"healthy"}`))
 }
 
+// VersionEndpoint returns service metadata
+func VersionEndpoint(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	response := map[string]string{
+		"service": serviceName,
+		"version": version,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
 func main() {
 	router := mux.NewRouter()
 	people = append(people, Person{ID: "1", Firstname: "Ernest", Lastname: "Hemingway", Address: &Address{City: "Dublin", State: "CA"}})
@@ -86,5 +104,6 @@ func main() {
 	router.HandleFunc("/people/{id}", UpdatePersonEndpoint).Methods("PUT")
 	router.HandleFunc("/people/{id}", DeletePersonEndpoint).Methods("DELETE")
 	router.HandleFunc("/health", HealthEndpoint).Methods("GET")
+	router.HandleFunc("/version", VersionEndpoint).Methods("GET")
 	log.Fatal(http.ListenAndServe(":12345", router))
 }
