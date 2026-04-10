@@ -1,8 +1,10 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -155,4 +157,86 @@ func TestVersionEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreatePersonEndpoint(t *testing.T) {
+	// Reset the people slice to initial state for each test
+	resetPeople()
+
+	// Test successful create
+	t.Run("create new person", func(t *testing.T) {
+		resetPeople() // Reset for each test case
+		// Create a valid person JSON
+		personJSON := `{"firstname":"John","lastname":"Doe","address":{"city":"New York","state":"NY"}}`
+		req := httptest.NewRequest("POST", "/people", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": ""})
+		req.Body = io.NopCloser(strings.NewReader(personJSON))
+		w := httptest.NewRecorder()
+		CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusCreated {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusCreated)
+		}
+
+		// Check response body
+		// Since the exact format may vary due to JSON marshaling, we'll just check that it's a valid JSON with the expected fields
+		body := w.Body.String()
+		if !strings.Contains(body, `"id":"3"`) || !strings.Contains(body, `"firstname":"John"`) || !strings.Contains(body, `"lastname":"Doe"`) {
+			t.Errorf("handler returned unexpected body: got %v", body)
+		}
+	})
+
+	// Test invalid JSON
+	t.Run("create person with invalid JSON", func(t *testing.T) {
+		resetPeople() // Reset for each test case
+		// Create an invalid person JSON
+		personJSON := `{"firstname":"John","lastname":}`
+		req := httptest.NewRequest("POST", "/people", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": ""})
+		req.Body = io.NopCloser(strings.NewReader(personJSON))
+		w := httptest.NewRecorder()
+		CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+
+		// Check error message
+		expectedBody := `{"error":"Invalid JSON"}`
+		body := w.Body.String()
+		if body != expectedBody {
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test missing required fields
+	t.Run("create person with missing fields", func(t *testing.T) {
+		resetPeople() // Reset for each test case
+		// Create a person with missing required fields
+		personJSON := `{"firstname":"John"}`
+		req := httptest.NewRequest("POST", "/people", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": ""})
+		req.Body = io.NopCloser(strings.NewReader(personJSON))
+		w := httptest.NewRecorder()
+		CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+
+		// Check error message
+		expectedBody := `{"error":"Firstname and Lastname are required"}`
+		body := w.Body.String()
+		if body != expectedBody {
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
 }
