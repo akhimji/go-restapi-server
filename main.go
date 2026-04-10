@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -41,12 +42,34 @@ func GetPeopleEndpoint(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(people)
 }
 func CreatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
-	params := mux.Vars(req)
 	var person Person
-	_ = json.NewDecoder(req.Body).Decode(&person)
-	person.ID = params["id"]
+	err := json.NewDecoder(req.Body).Decode(&person)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	// Generate a new ID for the person
+	person.ID = generateID()
 	people = append(people, person)
-	json.NewEncoder(w).Encode(people)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(person)
+}
+
+// Helper function to generate a new ID
+func generateID() string {
+	maxID := 0
+	for _, person := range people {
+		// Simple ID generation - find the maximum ID and increment
+		var id int
+		if _, err := fmt.Sscanf(person.ID, "%d", &id); err == nil {
+			if id > maxID {
+				maxID = id
+			}
+		}
+	}
+	return fmt.Sprintf("%d", maxID+1)
 }
 func UpdatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
@@ -99,8 +122,8 @@ func main() {
 	people = append(people, Person{ID: "1", Firstname: "Ernest", Lastname: "Hemingway", Address: &Address{City: "Dublin", State: "CA"}})
 	people = append(people, Person{ID: "2", Firstname: "George", Lastname: "Orwell"})
 	router.HandleFunc("/people", GetPeopleEndpoint).Methods("GET")
+	router.HandleFunc("/people", CreatePersonEndpoint).Methods("POST")
 	router.HandleFunc("/people/{id}", GetPersonEndpoint).Methods("GET")
-	router.HandleFunc("/people/{id}", CreatePersonEndpoint).Methods("POST")
 	router.HandleFunc("/people/{id}", UpdatePersonEndpoint).Methods("PUT")
 	router.HandleFunc("/people/{id}", DeletePersonEndpoint).Methods("DELETE")
 	router.HandleFunc("/health", HealthEndpoint).Methods("GET")

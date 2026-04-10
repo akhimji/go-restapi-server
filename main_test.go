@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -155,4 +156,46 @@ func TestVersionEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreatePersonEndpoint(t *testing.T) {
+	// Reset the people slice to initial state for each test
+	resetPeople()
+
+	// Test successful creation
+	t.Run("create person successfully", func(t *testing.T) {
+		resetPeople() // Reset for each test case
+		personData := `{"firstname":"John","lastname":"Doe","address":{"city":"New York","state":"NY"}}`
+		req := httptest.NewRequest("POST", "/people", strings.NewReader(personData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusCreated {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusCreated)
+		}
+
+		// Check that we got JSON back with the person
+		expectedContentType := "application/json"
+		actualContentType := w.Header().Get("Content-Type")
+		if actualContentType != expectedContentType {
+			t.Errorf("handler returned wrong content type: got %v want %v",
+				actualContentType, expectedContentType)
+		}
+	})
+
+	// Test invalid JSON
+	t.Run("create person with invalid JSON", func(t *testing.T) {
+		resetPeople() // Reset for each test case
+		req := httptest.NewRequest("POST", "/people", strings.NewReader(`{"firstname":}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+	})
 }
