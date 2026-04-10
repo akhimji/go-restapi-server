@@ -36,7 +36,8 @@ func GetPersonEndpoint(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
-	json.NewEncoder(w).Encode(&Person{})
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"error":"Person not found"}`))
 }
 func GetPeopleEndpoint(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(people)
@@ -82,23 +83,44 @@ func UpdatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 	for index, item := range people {
 		if item.ID == params["id"] {
-			people = append(people[:index], people[index+1:]...)
-			break
+			// Decode the new person data
+			var person Person
+			err := json.NewDecoder(req.Body).Decode(&person)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"Invalid JSON"}`))
+				return
+			}
+
+			// Validate required fields
+			if person.Firstname == "" || person.Lastname == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":"Firstname and Lastname are required"}`))
+				return
+			}
+
+			// Set the ID to the original ID
+			person.ID = params["id"]
+
+			// Update the person in place
+			people[index] = person
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(person)
+			return
 		}
 	}
-	var person Person
-	_ = json.NewDecoder(req.Body).Decode(&person)
-	person.ID = params["id"]
-	people = append(people, person)
-	json.NewEncoder(w).Encode(people)
+
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"error":"Person not found"}`))
 }
 func DeletePersonEndpoint(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 	for index, item := range people {
 		if item.ID == params["id"] {
+			// Remove the person from the slice
 			people = append(people[:index], people[index+1:]...)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"message":"Person deleted successfully"}`))
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 	}
