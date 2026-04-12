@@ -105,3 +105,61 @@ func TestGetPersonEndpoint(t *testing.T) {
 		}
 	})
 }
+
+func TestDeletePersonEndpoint(t *testing.T) {
+	// Create a test store with some data
+	store := store.NewInMemoryPersonStore()
+
+	// Add a test person
+	person := &models.Person{
+		ID:        "1",
+		FirstName: "John",
+		LastName:  "Doe",
+		Email:     "john.doe@example.com",
+		Age:       30,
+	}
+	store.Create(person)
+
+	// Create a people handler
+	handler := NewPeopleHandler(store)
+
+	// Test case 1: Delete existing person
+	t.Run("delete existing person", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/people/1", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		w := httptest.NewRecorder()
+		handler.DeletePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusNoContent {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusNoContent)
+		}
+
+		// Verify person was actually deleted from store
+		_, err := store.Get("1")
+		if err == nil {
+			t.Errorf("person was not deleted from store")
+		}
+	})
+
+	// Test case 2: Delete non-existing person
+	t.Run("delete non-existing person", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/people/999", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": "999"})
+		w := httptest.NewRecorder()
+		handler.DeletePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusNotFound {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusNotFound)
+		}
+
+		// Check error message in response
+		expectedBody := `{"error":"Person not found"}`
+		body := w.Body.String()
+		if body != expectedBody {
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+}
