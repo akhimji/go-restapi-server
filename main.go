@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 	"go-restapi-server/internal/handlers"
+	"go-restapi-server/internal/middleware"
 	"go-restapi-server/internal/store"
 )
 
@@ -41,5 +47,39 @@ func main() {
 	router.HandleFunc("/health", handlers.HealthEndpoint).Methods("GET")
 	router.HandleFunc("/version", VersionEndpoint).Methods("GET")
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	// Wrap router with logging middleware
+	router.Use(middleware.LoggingMiddleware)
+
+	// Create server with timeout
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Println("Starting server on :8080")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	// Create context with 5 second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Shutdown server gracefully
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server shutdown failed: %v", err)
+	}
+	log.Println("Server exited gracefully")
 }
