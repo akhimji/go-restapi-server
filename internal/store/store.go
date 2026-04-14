@@ -12,6 +12,7 @@ type PersonStore interface {
 	Get(id string) (*models.Person, error)
 	List() []*models.Person
 	Delete(id string) error
+	Update(person *models.Person) error
 }
 
 // InMemoryPersonStore is an in-memory implementation of PersonStore
@@ -31,6 +32,20 @@ func NewInMemoryPersonStore() *InMemoryPersonStore {
 func (s *InMemoryPersonStore) Create(person *models.Person) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.data[person.ID] = person
+	return nil
+}
+
+// Update updates an existing person in the store
+func (s *InMemoryPersonStore) Update(person *models.Person) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, exists := s.data[person.ID]
+	if !exists {
+		return &PersonNotFoundError{ID: person.ID}
+	}
 
 	s.data[person.ID] = person
 	return nil

@@ -1,17 +1,19 @@
 package handlers
 
 import (
-	"encoding/json"
-	"net/http"
+    "encoding/json"
+    "net/http"
+    "strconv"
+    "sync/atomic"
 
-	"github.com/gorilla/mux"
-	"go-restapi-server/internal/models"
-	"go-restapi-server/internal/store"
+    "github.com/gorilla/mux"
+    "go-restapi-server/internal/models"
+    "go-restapi-server/internal/store"
 )
 
 // PeopleHandler handles person-related operations
 type PeopleHandler struct {
-	store store.PersonStore
+    store store.PersonStore
 }
 
 // NewPeopleHandler creates a new PeopleHandler
@@ -29,31 +31,53 @@ func (h *PeopleHandler) GetPeopleEndpoint(w http.ResponseWriter, req *http.Reque
 
 // CreatePersonEndpoint creates a new person
 func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
-	var person models.Person
-	err := json.NewDecoder(req.Body).Decode(&person)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"Invalid JSON"}`))
+    var person models.Person
+    err := json.NewDecoder(req.Body).Decode(&person)
+    if err != nil {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+        return
+    }
+
+	// Validate required fields
+	if person.FirstName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Firstname is required"})
 		return
 	}
 
-	// Validate required fields
-	if person.FirstName == "" || person.LastName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"Firstname and Lastname are required"}`))
+	if person.LastName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Lastname is required"})
 		return
 	}
+
+    // Generate unique ID using a simple, process-safe counter
+    person.ID = nextID()
 
 	// Create the person in the store
 	err = h.store.Create(&person)
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"Failed to create person"}`))
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create person"})
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(person)
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(person)
+}
+
+// nextID returns a monotonically increasing string ID.
+var idCounter uint64
+
+func nextID() string {
+    n := atomic.AddUint64(&idCounter, 1)
+    return strconv.FormatUint(n, 10)
 }
 
 // GetPersonEndpoint retrieves a person by ID
@@ -93,7 +117,7 @@ func (h *PeopleHandler) UpdatePersonEndpoint(w http.ResponseWriter, req *http.Re
 
 	// Validate required fields
 	if updatedPerson.FirstName == "" || updatedPerson.LastName == "" {
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
 		w.Write([]byte(`{"error":"Firstname and Lastname are required"}`))
 		return
 	}
@@ -105,7 +129,7 @@ func (h *PeopleHandler) UpdatePersonEndpoint(w http.ResponseWriter, req *http.Re
 	person.Age = updatedPerson.Age
 
 	// Save the updated person back to the store
-	err = h.store.Create(person)
+	err = h.store.Update(person)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error":"Failed to update person"}`))
