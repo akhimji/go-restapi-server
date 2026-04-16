@@ -38,8 +38,8 @@ func TestGetPeopleEndpoint(t *testing.T) {
 	// Create a people handler
 	handler := NewPeopleHandler(store)
 
-	// Test case: Get all people
-	t.Run("get all people", func(t *testing.T) {
+	// Test case: Get all people (default pagination)
+	t.Run("get all people with default pagination", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/people", nil)
 		w := httptest.NewRecorder()
 		handler.GetPeopleEndpoint(w, req)
@@ -57,36 +57,181 @@ func TestGetPeopleEndpoint(t *testing.T) {
 				actualContentType, expectedContentType)
 		}
 
-		// Check response body is a JSON array
-		var responsePeople []models.Person
-		if err := json.NewDecoder(w.Body).Decode(&responsePeople); err != nil {
+		// Check response body is a JSON object with pagination data
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 			t.Fatalf("failed to decode response body: %v", err)
 		}
 
-		if len(responsePeople) != 2 {
+		// Check that the response has the expected structure
+		if _, exists := response["data"]; !exists {
+			t.Error("response missing 'data' field")
+		}
+		if _, exists := response["total"]; !exists {
+			t.Error("response missing 'total' field")
+		}
+		if _, exists := response["page"]; !exists {
+			t.Error("response missing 'page' field")
+		}
+		if _, exists := response["limit"]; !exists {
+			t.Error("response missing 'limit' field")
+		}
+		if _, exists := response["pages"]; !exists {
+			t.Error("response missing 'pages' field")
+		}
+
+		// Check that data is an array with 2 people
+		data, ok := response["data"].([]interface{})
+		if !ok {
+			t.Error("data field is not an array")
+		}
+		if len(data) != 2 {
 			t.Errorf("handler returned wrong number of people: got %v want %v",
-				len(responsePeople), 2)
+				len(data), 2)
 		}
 
 		// Check that we got the right people
 		person1Found := false
 		person2Found := false
-		for _, person := range responsePeople {
-			if person.ID == "1" {
-				person1Found = true
-				if person.FirstName != "John" || person.LastName != "Doe" || person.Email != "john.doe@example.com" || person.Age != 30 {
-					t.Errorf("person 1 data mismatch")
+		for _, item := range data {
+			if personMap, ok := item.(map[string]interface{}); ok {
+				if personMap["id"] == "1" {
+					person1Found = true
+					if personMap["firstName"] != "John" || personMap["lastName"] != "Doe" || personMap["email"] != "john.doe@example.com" || personMap["age"] != 30.0 {
+						t.Errorf("person 1 data mismatch")
+					}
 				}
-			}
-			if person.ID == "2" {
-				person2Found = true
-				if person.FirstName != "Jane" || person.LastName != "Smith" || person.Email != "jane.smith@example.com" || person.Age != 25 {
-					t.Errorf("person 2 data mismatch")
+				if personMap["id"] == "2" {
+					person2Found = true
+					if personMap["firstName"] != "Jane" || personMap["lastName"] != "Smith" || personMap["email"] != "jane.smith@example.com" || personMap["age"] != 25.0 {
+						t.Errorf("person 2 data mismatch")
+					}
 				}
 			}
 		}
 		if !person1Found || !person2Found {
 			t.Errorf("not all people were returned")
+		}
+
+		// Check pagination metadata
+		if total, ok := response["total"].(float64); ok {
+			if int(total) != 2 {
+				t.Errorf("total count is wrong: got %v want %v", int(total), 2)
+			}
+		}
+		if page, ok := response["page"].(float64); ok {
+			if int(page) != 1 {
+				t.Errorf("page is wrong: got %v want %v", int(page), 1)
+			}
+		}
+		if limit, ok := response["limit"].(float64); ok {
+			if int(limit) != 20 {
+				t.Errorf("limit is wrong: got %v want %v", int(limit), 20)
+			}
+		}
+		if pages, ok := response["pages"].(float64); ok {
+			if int(pages) != 1 {
+				t.Errorf("pages count is wrong: got %v want %v", int(pages), 1)
+			}
+		}
+	})
+
+	// Test case: Get people with specific page and limit
+	t.Run("get people with specific page and limit", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/people?page=1&limit=1", nil)
+		w := httptest.NewRecorder()
+		handler.GetPeopleEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Check response body
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+
+		// Check that data contains only 1 person
+		data, ok := response["data"].([]interface{})
+		if !ok {
+			t.Error("data field is not an array")
+		}
+		if len(data) != 1 {
+			t.Errorf("handler returned wrong number of people: got %v want %v",
+				len(data), 1)
+		}
+
+		// Check pagination metadata
+		if total, ok := response["total"].(float64); ok {
+			if int(total) != 2 {
+				t.Errorf("total count is wrong: got %v want %v", int(total), 2)
+			}
+		}
+		if page, ok := response["page"].(float64); ok {
+			if int(page) != 1 {
+				t.Errorf("page is wrong: got %v want %v", int(page), 1)
+			}
+		}
+		if limit, ok := response["limit"].(float64); ok {
+			if int(limit) != 1 {
+				t.Errorf("limit is wrong: got %v want %v", int(limit), 1)
+			}
+		}
+		if pages, ok := response["pages"].(float64); ok {
+			if int(pages) != 2 {
+				t.Errorf("pages count is wrong: got %v want %v", int(pages), 2)
+			}
+		}
+	})
+
+	// Test case: Get people with invalid page parameter
+	t.Run("get people with invalid page parameter", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/people?page=0&limit=1", nil)
+		w := httptest.NewRecorder()
+		handler.GetPeopleEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+	})
+
+	// Test case: Get people with invalid limit parameter
+	t.Run("get people with invalid limit parameter", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/people?page=1&limit=0", nil)
+		w := httptest.NewRecorder()
+		handler.GetPeopleEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusBadRequest {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusBadRequest)
+		}
+	})
+
+	// Test case: Get people with limit exceeding max
+	t.Run("get people with limit exceeding max", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/people?page=1&limit=150", nil)
+		w := httptest.NewRecorder()
+		handler.GetPeopleEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Check response body
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+
+		// Check that limit was capped to 100
+		if limit, ok := response["limit"].(float64); ok {
+			if int(limit) != 100 {
+				t.Errorf("limit should be capped to 100: got %v want %v", int(limit), 100)
+			}
 		}
 	})
 }
@@ -117,15 +262,50 @@ func TestGetPeopleEndpointEmptyStore(t *testing.T) {
 				actualContentType, expectedContentType)
 		}
 
-		// Check response body is an empty JSON array
-		var responsePeople []models.Person
-		if err := json.NewDecoder(w.Body).Decode(&responsePeople); err != nil {
+		// Check response body is a JSON object with pagination data
+		var response map[string]interface{}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 			t.Fatalf("failed to decode response body: %v", err)
 		}
 
-		if len(responsePeople) != 0 {
+				
+		// Check that data is an empty array
+		data, exists := response["data"]
+		if !exists {
+			t.Error("data field missing")
+		}
+		if data == nil {
+			t.Error("data field is nil")
+		}
+		dataSlice, ok := data.([]interface{})
+		if !ok {
+			t.Error("data field is not an array")
+		}
+		if len(dataSlice) != 0 {
 			t.Errorf("handler returned wrong number of people: got %v want %v",
-				len(responsePeople), 0)
+				len(dataSlice), 0)
+		}
+
+		// Check pagination metadata
+		if total, ok := response["total"].(float64); ok {
+			if int(total) != 0 {
+				t.Errorf("total count is wrong: got %v want %v", int(total), 0)
+			}
+		}
+		if page, ok := response["page"].(float64); ok {
+			if int(page) != 1 {
+				t.Errorf("page is wrong: got %v want %v", int(page), 1)
+			}
+		}
+		if limit, ok := response["limit"].(float64); ok {
+			if int(limit) != 20 {
+				t.Errorf("limit is wrong: got %v want %v", int(limit), 20)
+			}
+		}
+		if pages, ok := response["pages"].(float64); ok {
+			if int(pages) != 1 {
+				t.Errorf("pages count is wrong: got %v want %v", int(pages), 1)
+			}
 		}
 	})
 }

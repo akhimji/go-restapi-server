@@ -23,10 +23,91 @@ func NewPeopleHandler(store store.PersonStore) *PeopleHandler {
 
 // GetPeopleEndpoint returns all people in the store
 func (h *PeopleHandler) GetPeopleEndpoint(w http.ResponseWriter, req *http.Request) {
+	// Parse query parameters
+	pageStr := req.URL.Query().Get("page")
+	limitStr := req.URL.Query().Get("limit")
+
+	// Set defaults
+	page := 1
+	limit := 20
+	maxLimit := 100
+
+	// Parse page parameter
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid page parameter"})
+			return
+		}
+	}
+
+	// Parse limit parameter
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			if l > maxLimit {
+				limit = maxLimit
+			} else {
+				limit = l
+			}
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid limit parameter"})
+			return
+		}
+	} else {
+		// Default limit is 20
+		limit = 20
+	}
+
+	// Get all people
 	people := h.store.List()
+	total := len(people)
+
+	// Calculate pagination
+	offset := (page - 1) * limit
+	if offset >= total {
+		page = (total + limit - 1) / limit
+		if page < 1 {
+			page = 1
+		}
+		offset = (page - 1) * limit
+	}
+
+	// Paginate the results
+	var paginatedPeople []*models.Person
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		paginatedPeople = people[offset:end]
+	} else {
+		// When the offset is beyond the total, return empty slice
+		paginatedPeople = []*models.Person{}
+	}
+
+	// Calculate total pages
+	pages := (total + limit - 1) / limit
+	if pages < 1 {
+		pages = 1
+	}
+
+	// Return paginated response
+	response := map[string]interface{}{
+		"data":  paginatedPeople,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"pages": pages,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(people)
+	json.NewEncoder(w).Encode(response)
 }
 
 // CreatePersonEndpoint creates a new person
