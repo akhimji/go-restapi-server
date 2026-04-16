@@ -518,8 +518,8 @@ func TestCreatePersonEndpoint(t *testing.T) {
 				status, http.StatusUnprocessableEntity)
 		}
 
-		// Check error message
-		expectedBody := `{"error":"Firstname is required"}`
+		// Check error message - should match the new validation error format
+		expectedBody := `{"Errors":[{"Field":"firstName","Message":"is required"}]}`
 		body := w.Body.String()
 		// Trim whitespace to handle possible newlines
 		body = strings.TrimSpace(body)
@@ -551,8 +551,8 @@ func TestCreatePersonEndpoint(t *testing.T) {
 				status, http.StatusUnprocessableEntity)
 		}
 
-		// Check error message
-		expectedBody := `{"error":"Lastname is required"}`
+		// Check error message - should match the new validation error format
+		expectedBody := `{"Errors":[{"Field":"lastName","Message":"is required"}]}`
 		body := w.Body.String()
 		// Trim whitespace to handle possible newlines
 		body = strings.TrimSpace(body)
@@ -561,6 +561,584 @@ func TestCreatePersonEndpoint(t *testing.T) {
 			t.Logf("Got: %s", body)
 			t.Errorf("handler returned unexpected body: got %v want %v",
 				body, expectedBody)
+		}
+	})
+
+	// Test case 5: Create person with invalid name length (too short)
+	t.Run("create person with invalid name length (too short)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message - empty firstName returns "is required"
+		expectedBody := `{"Errors":[{"Field":"firstName","Message":"is required"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 6: Create person with invalid name length (too long)
+	t.Run("create person with invalid name length (too long)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "A" + strings.Repeat("B", 100) + "C",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"firstName","Message":"must be 1-100 characters"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 7: Create person with invalid age (negative)
+	t.Run("create person with invalid age (negative)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       -5,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"age","Message":"must be between 0 and 150"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 8: Create person with invalid age (too high)
+	t.Run("create person with invalid age (too high)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       200,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"age","Message":"must be between 0 and 150"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 9: Create person with invalid email format
+	t.Run("create person with invalid email format", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "invalid-email",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"email","Message":"must be a valid email address"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 10: Create person with multiple validation errors
+	t.Run("create person with multiple validation errors", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "",
+			"lastName":  "",
+			"email":     "invalid-email",
+			"age":       -5,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message - field order may vary, so check each individually
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		
+		// Check that all required errors are present
+		if !strings.Contains(body, `"Field":"firstName","Message":"is required"`) {
+			t.Errorf("Missing firstName required error in response: %s", body)
+		}
+		if !strings.Contains(body, `"Field":"lastName","Message":"is required"`) {
+			t.Errorf("Missing lastName required error in response: %s", body)
+		}
+		if !strings.Contains(body, `"Field":"email","Message":"must be a valid email address"`) {
+			t.Errorf("Missing email validation error in response: %s", body)
+		}
+		if !strings.Contains(body, `"Field":"age","Message":"must be between 0 and 150"`) {
+			t.Errorf("Missing age validation error in response: %s", body)
+		}
+	})
+}
+
+func TestUpdatePersonEndpoint(t *testing.T) {
+	// Create a test store with some data
+	store := store.NewInMemoryPersonStore()
+
+	// Add a test person
+	person := &models.Person{
+		ID:        "1",
+		FirstName: "John",
+		LastName:  "Doe",
+		Email:     "john.doe@example.com",
+		Age:       30,
+	}
+	store.Create(person)
+
+	// Create a people handler
+	handler := NewPeopleHandler(store)
+
+	// Test case 1: Update with valid data
+	t.Run("update person with valid data", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Check response body
+		var responsePerson models.Person
+		if err := json.NewDecoder(w.Body).Decode(&responsePerson); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+
+		// Verify fields are updated correctly
+		if responsePerson.FirstName != "Jane" {
+			t.Errorf("handler returned wrong first name: got %v want %v",
+				responsePerson.FirstName, "Jane")
+		}
+		if responsePerson.LastName != "Smith" {
+			t.Errorf("handler returned wrong last name: got %v want %v",
+				responsePerson.LastName, "Smith")
+		}
+		if responsePerson.Email != "jane.smith@example.com" {
+			t.Errorf("handler returned wrong email: got %v want %v",
+				responsePerson.Email, "jane.smith@example.com")
+		}
+		if responsePerson.Age != 25 {
+			t.Errorf("handler returned wrong age: got %v want %v",
+				responsePerson.Age, 25)
+		}
+	})
+
+	// Test case 2: Update with invalid name (empty)
+	t.Run("update person with invalid name (empty)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"firstName","Message":"is required"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 3: Update with invalid age (negative)
+	t.Run("update person with invalid age (negative)", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       -5,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"age","Message":"must be between 0 and 150"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+
+	// Test case 4: Update with invalid email format
+	t.Run("update person with invalid email format", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "invalid-email",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Check error message
+		expectedBody := `{"Errors":[{"Field":"email","Message":"must be a valid email address"}]}`
+		body := w.Body.String()
+		// Trim whitespace to handle possible newlines
+		body = strings.TrimSpace(body)
+		if body != expectedBody {
+			t.Logf("Expected: %s", expectedBody)
+			t.Logf("Got: %s", body)
+			t.Errorf("handler returned unexpected body: got %v want %v",
+				body, expectedBody)
+		}
+	})
+}
+
+func TestPatchPersonEndpoint(t *testing.T) {
+	// Create a test store with some data
+	store := store.NewInMemoryPersonStore()
+
+	// Add a test person
+	person := &models.Person{
+		ID:        "1",
+		FirstName: "John",
+		LastName:  "Doe",
+		Email:     "john.doe@example.com",
+		Age:       30,
+	}
+	store.Create(person)
+
+	// Create a people handler
+	handler := NewPeopleHandler(store)
+
+	// Test case 1: Partially update with valid data
+	t.Run("patch person with valid data", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PATCH", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Check response body
+		var responsePerson models.Person
+		if err := json.NewDecoder(w.Body).Decode(&responsePerson); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+
+		// Verify fields are updated correctly
+		if responsePerson.FirstName != "Jane" {
+			t.Errorf("handler returned wrong first name: got %v want %v",
+				responsePerson.FirstName, "Jane")
+		}
+		if responsePerson.LastName != "Doe" {
+			t.Errorf("handler returned wrong last name: got %v want %v",
+				responsePerson.LastName, "Doe")
+		}
+		if responsePerson.Email != "john.doe@example.com" {
+			t.Errorf("handler returned wrong email: got %v want %v",
+				responsePerson.Email, "john.doe@example.com")
+		}
+		if responsePerson.Age != 25 {
+			t.Errorf("handler returned wrong age: got %v want %v",
+				responsePerson.Age, 25)
+		}
+	})
+
+	// Test case 2: Partially update with invalid data (should not update anything)
+	t.Run("patch person with invalid data", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PATCH", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Verify original data was not changed
+		updatedPerson, _ := store.Get("1")
+		if updatedPerson.FirstName != "Jane" {
+			t.Errorf("handler updated firstName when it should not have: got %v want %v",
+				updatedPerson.FirstName, "Jane")
+		}
+		if updatedPerson.Age != 25 {
+			t.Errorf("handler updated age when it should not have: got %v want %v",
+				updatedPerson.Age, 25)
+		}
+	})
+
+	// Test case 3: Partially update with empty body
+	t.Run("patch person with empty body", func(t *testing.T) {
+		jsonData := []byte(`{}`)
+		req := httptest.NewRequest("PATCH", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Check that no fields were changed
+		updatedPerson, _ := store.Get("1")
+		if updatedPerson.FirstName != "Jane" {
+			t.Errorf("handler changed firstName when it should not have: got %v want %v",
+				updatedPerson.FirstName, "Jane")
+		}
+		if updatedPerson.Age != 25 {
+			t.Errorf("handler changed age when it should not have: got %v want %v",
+				updatedPerson.Age, 25)
+		}
+	})
+
+	// Test case 4: Partially update non-existing person
+	t.Run("patch non-existing person", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PATCH", "/people/999", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "999"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusNotFound {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusNotFound)
+		}
+	})
+
+	// Test case 5: Partially update with invalid email
+	t.Run("patch person with invalid email", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"email": "invalid-email",
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PATCH", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		// Verify original data was not changed
+		updatedPerson, _ := store.Get("1")
+		if updatedPerson.Email != "john.doe@example.com" {
+			t.Errorf("handler changed email when it should not have: got %v want %v",
+				updatedPerson.Email, "john.doe@example.com")
+		}
+	})
+
+	// Test case 6: Partially update with valid email
+	t.Run("patch person with valid email", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"email": "jane.smith@example.com",
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PATCH", "/people/1", bytes.NewBuffer(jsonData))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.PatchPersonEndpoint(w, req)
+
+		// Check status code
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusOK)
+		}
+
+		// Verify email was updated
+		updatedPerson, _ := store.Get("1")
+		if updatedPerson.Email != "jane.smith@example.com" {
+			t.Errorf("handler did not update email: got %v want %v",
+				updatedPerson.Email, "jane.smith@example.com")
 		}
 	})
 }

@@ -47,6 +47,7 @@ func main() {
 	router.HandleFunc("/people", peopleHandler.CreatePersonEndpoint).Methods("POST")
 	router.HandleFunc("/people/{id}", peopleHandler.GetPersonEndpoint).Methods("GET")
 	router.HandleFunc("/people/{id}", peopleHandler.UpdatePersonEndpoint).Methods("PUT")
+	router.HandleFunc("/people/{id}", peopleHandler.PatchPersonEndpoint).Methods("PATCH")
 	router.HandleFunc("/people/{id}", peopleHandler.DeletePersonEndpoint).Methods("DELETE")
 	router.HandleFunc("/health", handlers.HealthEndpoint).Methods("GET")
 	router.HandleFunc("/version", VersionEndpoint).Methods("GET")

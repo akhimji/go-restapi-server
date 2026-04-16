@@ -8,3 +8,11 @@ type Person struct {
 	Email     string `json:"email"`
 	Age       int    `json:"age"`
 }
+
+// PatchPerson represents a partial update to a person entity
+type PatchPerson struct {
+	FirstName *string `json:"firstName,omitempty"`
+	LastName  *string `json:"lastName,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	Age       *int    `json:"age,omitempty"`
+}

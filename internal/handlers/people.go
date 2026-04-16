@@ -9,6 +9,7 @@ import (
     "github.com/gorilla/mux"
     "go-restapi-server/internal/models"
     "go-restapi-server/internal/store"
+    "go-restapi-server/internal/validation"
 )
 
 // PeopleHandler handles person-related operations
@@ -121,18 +122,21 @@ func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Re
         return
     }
 
-	// Validate required fields
-	if person.FirstName == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Firstname is required"})
-		return
-	}
+	// Validate the person
+	err = validation.ValidatePerson(&person)
+	if err != nil {
+		// Handle validation errors
+		if validationErrors, ok := err.(*validation.PersonValidationErrors); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(validationErrors)
+			return
+		}
 
-	if person.LastName == "" {
+		// For any other error, return internal server error
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Lastname is required"})
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Internal server error"})
 		return
 	}
 
@@ -196,10 +200,21 @@ func (h *PeopleHandler) UpdatePersonEndpoint(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	// Validate required fields
-	if updatedPerson.FirstName == "" || updatedPerson.LastName == "" {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write([]byte(`{"error":"Firstname and Lastname are required"}`))
+	// Validate the person
+	err = validation.ValidatePerson(&updatedPerson)
+	if err != nil {
+		// Handle validation errors
+		if validationErrors, ok := err.(*validation.PersonValidationErrors); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(validationErrors)
+			return
+		}
+
+		// For any other error, return internal server error
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Internal server error"})
 		return
 	}
 
@@ -208,6 +223,96 @@ func (h *PeopleHandler) UpdatePersonEndpoint(w http.ResponseWriter, req *http.Re
 	person.LastName = updatedPerson.LastName
 	person.Email = updatedPerson.Email
 	person.Age = updatedPerson.Age
+
+	// Save the updated person back to the store
+	err = h.store.Update(person)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Failed to update person"}`))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(person)
+}
+
+// PatchPersonEndpoint partially updates a person by ID
+func (h *PeopleHandler) PatchPersonEndpoint(w http.ResponseWriter, req *http.Request) {
+	params := mux.Vars(req)
+
+	// Get the person from the store
+	person, err := h.store.Get(params["id"])
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"Person not found"}`))
+		return
+	}
+
+	// Decode the patch data
+	var patchPerson models.PatchPerson
+	err = json.NewDecoder(req.Body).Decode(&patchPerson)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Invalid JSON"}`))
+		return
+	}
+
+	// Create a temporary person with only the provided fields for validation
+	tempPerson := &models.Person{
+		ID: person.ID,
+		// Keep existing values
+		FirstName: person.FirstName,
+		LastName:  person.LastName,
+		Email:     person.Email,
+		Age:       person.Age,
+	}
+
+	// Apply only the provided fields to the temporary person
+	if patchPerson.FirstName != nil {
+		tempPerson.FirstName = *patchPerson.FirstName
+	}
+	if patchPerson.LastName != nil {
+		tempPerson.LastName = *patchPerson.LastName
+	}
+	if patchPerson.Email != nil {
+		tempPerson.Email = *patchPerson.Email
+	}
+	if patchPerson.Age != nil {
+		tempPerson.Age = *patchPerson.Age
+	}
+
+	// Validate the resulting person with the same validation rules used by POST
+	err = validation.ValidatePerson(tempPerson)
+	if err != nil {
+		// Handle validation errors
+		if validationErrors, ok := err.(*validation.PersonValidationErrors); ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(validationErrors)
+			return
+		}
+
+		// For any other error, return internal server error
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Internal server error"})
+		return
+	}
+
+	// Update the actual person with the validated values
+	// Apply only the provided fields to the existing person
+	if patchPerson.FirstName != nil {
+		person.FirstName = *patchPerson.FirstName
+	}
+	if patchPerson.LastName != nil {
+		person.LastName = *patchPerson.LastName
+	}
+	if patchPerson.Email != nil {
+		person.Email = *patchPerson.Email
+	}
+	if patchPerson.Age != nil {
+		person.Age = *patchPerson.Age
+	}
 
 	// Save the updated person back to the store
 	err = h.store.Update(person)
