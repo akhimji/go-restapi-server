@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go-restapi-server/internal/handlers"
-	"go-restapi-server/internal/middleware"
+	"go-restapi-server/internal/observability"
 	"go-restapi-server/internal/store"
 )
 
@@ -30,6 +31,9 @@ func VersionEndpoint(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	// Initialize slog with JSON handler for structured logging
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	router := mux.NewRouter()
 
 	// Create store
@@ -47,8 +51,9 @@ func main() {
 	router.HandleFunc("/health", handlers.HealthEndpoint).Methods("GET")
 	router.HandleFunc("/version", VersionEndpoint).Methods("GET")
 
-	// Wrap router with logging middleware
-	router.Use(middleware.LoggingMiddleware)
+	// Wrap router with request ID middleware first, then logging middleware
+	router.Use(observability.RequestIDMiddleware)
+	router.Use(observability.LoggingMiddleware)
 
 	// Create server with timeout
 	server := &http.Server{
