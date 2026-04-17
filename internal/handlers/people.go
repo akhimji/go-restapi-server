@@ -1,20 +1,20 @@
 package handlers
 
 import (
-    "encoding/json"
-    "net/http"
-    "strconv"
-    "sync/atomic"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"sync/atomic"
 
-    "github.com/gorilla/mux"
-    "go-restapi-server/internal/models"
-    "go-restapi-server/internal/store"
-    "go-restapi-server/internal/validation"
+	"github.com/gorilla/mux"
+	"go-restapi-server/internal/models"
+	"go-restapi-server/internal/store"
+	"go-restapi-server/internal/validation"
 )
 
 // PeopleHandler handles person-related operations
 type PeopleHandler struct {
-    store store.PersonStore
+	store store.PersonStore
 }
 
 // NewPeopleHandler creates a new PeopleHandler
@@ -113,14 +113,14 @@ func (h *PeopleHandler) GetPeopleEndpoint(w http.ResponseWriter, req *http.Reque
 
 // CreatePersonEndpoint creates a new person
 func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
-    var person models.Person
-    err := json.NewDecoder(req.Body).Decode(&person)
-    if err != nil {
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
-        return
-    }
+	var person models.Person
+	err := json.NewDecoder(req.Body).Decode(&person)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+		return
+	}
 
 	// Validate the person
 	err = validation.ValidatePerson(&person)
@@ -140,8 +140,8 @@ func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-    // Generate unique ID using a simple, process-safe counter
-    person.ID = nextID()
+	// Generate unique ID using a simple, process-safe counter
+	person.ID = nextID()
 
 	// Create the person in the store
 	err = h.store.Create(&person)
@@ -152,17 +152,17 @@ func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(person)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(person)
 }
 
 // nextID returns a monotonically increasing string ID.
 var idCounter uint64
 
 func nextID() string {
-    n := atomic.AddUint64(&idCounter, 1)
-    return strconv.FormatUint(n, 10)
+	n := atomic.AddUint64(&idCounter, 1)
+	return strconv.FormatUint(n, 10)
 }
 
 // GetPersonEndpoint retrieves a person by ID

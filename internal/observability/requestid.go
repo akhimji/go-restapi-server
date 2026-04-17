@@ -29,13 +29,13 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Add request ID to response header
 		w.Header().Set("X-Request-ID", requestID)
-		
+
 		// Add request ID to request context
 		ctx := context.WithValue(r.Context(), RequestIDKey{}, requestID)
-		
+
 		// Call the next handler with updated context
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

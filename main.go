@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
 	"go-restapi-server/internal/handlers"
+	"go-restapi-server/internal/metrics"
 	"go-restapi-server/internal/observability"
 	"go-restapi-server/internal/store"
 )
@@ -39,6 +41,9 @@ func main() {
 	// Create store
 	personStore := store.NewInMemoryPersonStore()
 
+	// Create metrics
+	metricsStore := metrics.NewMetrics()
+
 	// Create handlers
 	peopleHandler := handlers.NewPeopleHandler(personStore)
 
@@ -51,10 +56,43 @@ func main() {
 	router.HandleFunc("/people/{id}", peopleHandler.DeletePersonEndpoint).Methods("DELETE")
 	router.HandleFunc("/health", handlers.HealthEndpoint).Methods("GET")
 	router.HandleFunc("/version", VersionEndpoint).Methods("GET")
+	router.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
+		// Get current people count
+		peopleCount := int64(len(personStore.List()))
+
+		// Update metrics with current count
+		metricsStore.SetPeopleCount(peopleCount)
+
+		// Return metrics as JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"uptime_seconds":   time.Since(metricsStore.GetStartTime()).Seconds(),
+			"total_requests":   metricsStore.GetTotalRequests(),
+			"requests_by_status": metricsStore.GetRequestsByStatus(),
+			"people_count":     peopleCount,
+		})
+	}).Methods("GET")
 
 	// Wrap router with request ID middleware first, then logging middleware
 	router.Use(observability.RequestIDMiddleware)
 	router.Use(observability.LoggingMiddleware)
+	// Add metrics middleware to track requests
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Increment total requests
+			metricsStore.IncrementTotalRequests()
+
+			// Wrap response writer to capture status code
+			wrapper := &observability.ResponseWriterWrapper{ResponseWriter: w}
+
+			// Call the next handler
+			next.ServeHTTP(wrapper, r)
+
+			// Increment requests by status
+			metricsStore.IncrementRequestsByStatus(strconv.Itoa(wrapper.GetStatusCode()))
+		})
+	})
 
 	// Create server with timeout
 	server := &http.Server{

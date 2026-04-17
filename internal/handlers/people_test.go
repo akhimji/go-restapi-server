@@ -268,7 +268,6 @@ func TestGetPeopleEndpointEmptyStore(t *testing.T) {
 			t.Fatalf("failed to decode response body: %v", err)
 		}
 
-				
 		// Check that data is an empty array
 		data, exists := response["data"]
 		if !exists {
@@ -759,7 +758,7 @@ func TestCreatePersonEndpoint(t *testing.T) {
 		body := w.Body.String()
 		// Trim whitespace to handle possible newlines
 		body = strings.TrimSpace(body)
-		
+
 		// Check that all required errors are present
 		if !strings.Contains(body, `"Field":"firstName","Message":"is required"`) {
 			t.Errorf("Missing firstName required error in response: %s", body)
