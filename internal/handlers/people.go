@@ -1,24 +1,72 @@
 package handlers
 
 import (
-    "encoding/json"
-    "net/http"
-    "strconv"
-    "sync/atomic"
+	"encoding/json"
+	"net/http"
+	"regexp"
+	"strconv"
+	"sync/atomic"
 
-    "github.com/gorilla/mux"
-    "go-restapi-server/internal/models"
-    "go-restapi-server/internal/store"
+	"github.com/gorilla/mux"
+	"go-restapi-server/internal/models"
+	"go-restapi-server/internal/store"
 )
 
 // PeopleHandler handles person-related operations
 type PeopleHandler struct {
-    store store.PersonStore
+	store store.PersonStore
 }
 
 // NewPeopleHandler creates a new PeopleHandler
 func NewPeopleHandler(store store.PersonStore) *PeopleHandler {
 	return &PeopleHandler{store: store}
+}
+
+// ValidationError represents a single field validation failure.
+type ValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// emailRegexp is a basic email format validator.
+var emailRegexp = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+// validatePerson validates a Person and returns any field errors.
+func validatePerson(p *models.Person) []ValidationError {
+	var errs []ValidationError
+
+	// firstName: required, 1-100 characters
+	if p.FirstName == "" {
+		errs = append(errs, ValidationError{Field: "firstName", Message: "firstName is required"})
+	} else if len(p.FirstName) > 100 {
+		errs = append(errs, ValidationError{Field: "firstName", Message: "firstName must be between 1 and 100 characters"})
+	}
+
+	// lastName: required, 1-100 characters
+	if p.LastName == "" {
+		errs = append(errs, ValidationError{Field: "lastName", Message: "lastName is required"})
+	} else if len(p.LastName) > 100 {
+		errs = append(errs, ValidationError{Field: "lastName", Message: "lastName must be between 1 and 100 characters"})
+	}
+
+	// age: optional (zero value treated as not provided), but if provided must be 0-150
+	if p.Age < 0 || p.Age > 150 {
+		errs = append(errs, ValidationError{Field: "age", Message: "age must be between 0 and 150"})
+	}
+
+	// email: optional, but if provided must match basic format
+	if p.Email != "" && !emailRegexp.MatchString(p.Email) {
+		errs = append(errs, ValidationError{Field: "email", Message: "email must be a valid email address"})
+	}
+
+	return errs
+}
+
+// writeValidationErrors writes a 422 response with structured field errors.
+func writeValidationErrors(w http.ResponseWriter, errs []ValidationError) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	json.NewEncoder(w).Encode(map[string]interface{}{"errors": errs})
 }
 
 // GetPeopleEndpoint returns all people in the store
@@ -112,32 +160,23 @@ func (h *PeopleHandler) GetPeopleEndpoint(w http.ResponseWriter, req *http.Reque
 
 // CreatePersonEndpoint creates a new person
 func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Request) {
-    var person models.Person
-    err := json.NewDecoder(req.Body).Decode(&person)
-    if err != nil {
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
-        return
-    }
-
-	// Validate required fields
-	if person.FirstName == "" {
+	var person models.Person
+	err := json.NewDecoder(req.Body).Decode(&person)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Firstname is required"})
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
 		return
 	}
 
-	if person.LastName == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Lastname is required"})
+	// Validate fields
+	if errs := validatePerson(&person); len(errs) > 0 {
+		writeValidationErrors(w, errs)
 		return
 	}
 
-    // Generate unique ID using a simple, process-safe counter
-    person.ID = nextID()
+	// Generate unique ID using a simple, process-safe counter
+	person.ID = nextID()
 
 	// Create the person in the store
 	err = h.store.Create(&person)
@@ -148,17 +187,17 @@ func (h *PeopleHandler) CreatePersonEndpoint(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(person)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(person)
 }
 
 // nextID returns a monotonically increasing string ID.
 var idCounter uint64
 
 func nextID() string {
-    n := atomic.AddUint64(&idCounter, 1)
-    return strconv.FormatUint(n, 10)
+	n := atomic.AddUint64(&idCounter, 1)
+	return strconv.FormatUint(n, 10)
 }
 
 // GetPersonEndpoint retrieves a person by ID
@@ -196,10 +235,9 @@ func (h *PeopleHandler) UpdatePersonEndpoint(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	// Validate required fields
-	if updatedPerson.FirstName == "" || updatedPerson.LastName == "" {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write([]byte(`{"error":"Firstname and Lastname are required"}`))
+	// Validate fields
+	if errs := validatePerson(&updatedPerson); len(errs) > 0 {
+		writeValidationErrors(w, errs)
 		return
 	}
 

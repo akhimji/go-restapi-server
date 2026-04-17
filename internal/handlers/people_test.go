@@ -268,7 +268,6 @@ func TestGetPeopleEndpointEmptyStore(t *testing.T) {
 			t.Fatalf("failed to decode response body: %v", err)
 		}
 
-				
 		// Check that data is an empty array
 		data, exists := response["data"]
 		if !exists {
@@ -405,6 +404,31 @@ func TestGetPersonEndpoint(t *testing.T) {
 	})
 }
 
+// hasValidationError checks whether a 422 response body contains an error for the given field.
+func hasValidationError(t *testing.T, body string, field string) {
+	t.Helper()
+	var resp map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatalf("failed to parse response body as JSON: %v\nbody: %s", err, body)
+	}
+	errsRaw, ok := resp["errors"]
+	if !ok {
+		t.Fatalf("response missing 'errors' key; got: %s", body)
+	}
+	errs, ok := errsRaw.([]interface{})
+	if !ok {
+		t.Fatalf("'errors' is not an array; got: %s", body)
+	}
+	for _, e := range errs {
+		if m, ok := e.(map[string]interface{}); ok {
+			if m["field"] == field {
+				return
+			}
+		}
+	}
+	t.Errorf("expected validation error for field %q but not found; got: %s", field, body)
+}
+
 func TestCreatePersonEndpoint(t *testing.T) {
 	// Create a test store
 	store := store.NewInMemoryPersonStore()
@@ -518,17 +542,9 @@ func TestCreatePersonEndpoint(t *testing.T) {
 				status, http.StatusUnprocessableEntity)
 		}
 
-		// Check error message
-		expectedBody := `{"error":"Firstname is required"}`
-		body := w.Body.String()
-		// Trim whitespace to handle possible newlines
-		body = strings.TrimSpace(body)
-		if body != expectedBody {
-			t.Logf("Expected: %s", expectedBody)
-			t.Logf("Got: %s", body)
-			t.Errorf("handler returned unexpected body: got %v want %v",
-				body, expectedBody)
-		}
+		// Check structured error identifies firstName
+		body := strings.TrimSpace(w.Body.String())
+		hasValidationError(t, body, "firstName")
 	})
 
 	// Test case 4: Create person with missing lastName
@@ -551,16 +567,217 @@ func TestCreatePersonEndpoint(t *testing.T) {
 				status, http.StatusUnprocessableEntity)
 		}
 
-		// Check error message
-		expectedBody := `{"error":"Lastname is required"}`
-		body := w.Body.String()
-		// Trim whitespace to handle possible newlines
-		body = strings.TrimSpace(body)
-		if body != expectedBody {
-			t.Logf("Expected: %s", expectedBody)
-			t.Logf("Got: %s", body)
-			t.Errorf("handler returned unexpected body: got %v want %v",
-				body, expectedBody)
+		// Check structured error identifies lastName
+		body := strings.TrimSpace(w.Body.String())
+		hasValidationError(t, body, "lastName")
+	})
+
+	// Test case 5: Create person with firstName exceeding 100 characters
+	t.Run("create person with firstName too long", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": strings.Repeat("a", 101),
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "firstName")
+	})
+
+	// Test case 6: Create person with age out of range
+	t.Run("create person with age out of range", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "jane.smith@example.com",
+			"age":       200,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "age")
+	})
+
+	// Test case 7: Create person with invalid email
+	t.Run("create person with invalid email", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Jane",
+			"lastName":  "Smith",
+			"email":     "not-an-email",
+			"age":       25,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "email")
+	})
+
+	// Test case 8: Create person with multiple validation errors
+	t.Run("create person with multiple validation errors", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "",
+			"lastName":  "",
+			"email":     "bad-email",
+			"age":       200,
+		}
+
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("POST", "/people", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.CreatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+
+		body := strings.TrimSpace(w.Body.String())
+		hasValidationError(t, body, "firstName")
+		hasValidationError(t, body, "lastName")
+		hasValidationError(t, body, "age")
+		hasValidationError(t, body, "email")
+	})
+}
+
+func TestUpdatePersonEndpoint(t *testing.T) {
+	// Create a test store with a person
+	s := store.NewInMemoryPersonStore()
+	person := &models.Person{
+		ID:        "42",
+		FirstName: "John",
+		LastName:  "Doe",
+		Email:     "john.doe@example.com",
+		Age:       30,
+	}
+	s.Create(person)
+
+	handler := NewPeopleHandler(s)
+
+	// Test case 1: Valid update
+	t.Run("update valid person", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Johnny",
+			"lastName":  "Doer",
+			"email":     "johnny.doer@example.com",
+			"age":       31,
+		}
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/42", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		req = mux.SetURLVars(req, map[string]string{"id": "42"})
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusOK {
+			t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+		}
+	})
+
+	// Test case 2: Missing firstName
+	t.Run("update missing firstName", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"lastName": "Doer",
+		}
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/42", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		req = mux.SetURLVars(req, map[string]string{"id": "42"})
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "firstName")
+	})
+
+	// Test case 3: Age out of range
+	t.Run("update age out of range", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Johnny",
+			"lastName":  "Doer",
+			"age":       200,
+		}
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/42", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		req = mux.SetURLVars(req, map[string]string{"id": "42"})
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "age")
+	})
+
+	// Test case 4: Invalid email
+	t.Run("update invalid email", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Johnny",
+			"lastName":  "Doer",
+			"email":     "not-valid",
+			"age":       31,
+		}
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/42", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		req = mux.SetURLVars(req, map[string]string{"id": "42"})
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusUnprocessableEntity {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusUnprocessableEntity)
+		}
+		hasValidationError(t, strings.TrimSpace(w.Body.String()), "email")
+	})
+
+	// Test case 5: Non-existing person
+	t.Run("update non-existing person", func(t *testing.T) {
+		personData := map[string]interface{}{
+			"firstName": "Johnny",
+			"lastName":  "Doer",
+		}
+		jsonData, _ := json.Marshal(personData)
+		req := httptest.NewRequest("PUT", "/people/9999", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		req = mux.SetURLVars(req, map[string]string{"id": "9999"})
+		w := httptest.NewRecorder()
+		handler.UpdatePersonEndpoint(w, req)
+
+		if status := w.Code; status != http.StatusNotFound {
+			t.Errorf("handler returned wrong status code: got %v want %v",
+				status, http.StatusNotFound)
 		}
 	})
 }
